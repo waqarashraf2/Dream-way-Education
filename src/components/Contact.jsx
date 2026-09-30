@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import {
   FiPhone, FiMail, FiMapPin, FiClock,
-  FiSend, FiCheck, FiYoutube
+  FiSend, FiCheck, FiYoutube, FiAlertCircle
 } from 'react-icons/fi'
 import { FaWhatsapp } from 'react-icons/fa'
 import { AiFillFacebook, AiFillTikTok } from 'react-icons/ai'
@@ -96,18 +96,54 @@ export default function Contact() {
   })
   const [submitted, setSubmitted] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [serverError, setServerError] = useState('')
+  const [validationErrors, setValidationErrors] = useState({})
+  const [responseMsg, setResponseMsg] = useState('')
 
   const handleChange = (e) => {
-    setForm(prev => ({ ...prev, [e.target.name]: e.target.value }))
+    const { name, value } = e.target
+    setForm(prev => ({ ...prev, [name]: value }))
+    if (validationErrors[name]) {
+      setValidationErrors(prev => ({ ...prev, [name]: null }))
+    }
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
-    setTimeout(() => {
+    setServerError('')
+    setValidationErrors({})
+
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api'
+
+    try {
+      const res = await fetch(`${apiUrl}/contact`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify(form),
+      })
+
+      const data = await res.json()
+
+      if (res.ok && data.success) {
+        setSubmitted(true)
+        setResponseMsg(data.message || 'Thank you for reaching out! We will contact you shortly.')
+        setForm({ name: '', email: '', phone: '', country: '', service: '', message: '' })
+      } else if (res.status === 422 && data.errors) {
+        setValidationErrors(data.errors)
+        setServerError(data.message || 'Please check the entered values.')
+      } else {
+        setServerError(data.message || 'Failed to submit form. Please try again.')
+      }
+    } catch (err) {
+      console.error('Contact Form Error:', err)
+      setServerError('Unable to connect to the server. Please ensure the backend is running or contact us via WhatsApp.')
+    } finally {
       setLoading(false)
-      setSubmitted(true)
-    }, 1800)
+    }
   }
 
   const contactCardsGrid = isMobile ? '1fr' : isTablet ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)'
@@ -198,24 +234,45 @@ export default function Contact() {
                     <h3 style={{ fontSize: '24px', fontFamily: "'Fraunces',serif", fontWeight: '600', color: '#111827', marginBottom: '12px' }}>
                       Message Received!
                     </h3>
-                    <p style={{ fontSize: '15px', color: '#6b7280', lineHeight: '1.7', maxWidth: '360px', margin: '0 auto 28px' }}>
-                      Thank you for reaching out. One of our counselors will contact you within 24 hours.
+                    <p style={{ fontSize: '15px', color: '#6b7280', lineHeight: '1.7', maxWidth: '380px', margin: '0 auto 28px' }}>
+                      {responseMsg || 'Thank you for reaching out. One of our counselors will contact you within 24 hours.'}
                     </p>
                     
-                    <a href="https://wa.me/923013037141"
-                      target="_blank"
-                      rel="noreferrer"
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '12px 24px', borderRadius: '12px', background: '#25D366', color: 'white', fontWeight: '600', fontSize: '14px', textDecoration: 'none' }}
-                    >
-                      <FaWhatsapp size={18} /> Chat on WhatsApp
-                    </a>
+                    <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                      <a href="https://wa.me/923013037141"
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '12px 24px', borderRadius: '12px', background: '#25D366', color: 'white', fontWeight: '600', fontSize: '14px', textDecoration: 'none' }}
+                      >
+                        <FaWhatsapp size={18} /> Chat on WhatsApp
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => setSubmitted(false)}
+                        style={{ padding: '12px 20px', borderRadius: '12px', background: '#f3f4f6', color: '#374151', fontWeight: '600', fontSize: '14px', border: 'none', cursor: 'pointer' }}
+                      >
+                        Submit Another Inquiry
+                      </button>
+                    </div>
                   </motion.div>
                 ) : (
                   <>
                     <h2 style={{ fontSize: isMobile ? '20px' : '22px', fontFamily: "'Fraunces',serif", fontWeight: '600', color: '#111827', marginBottom: '6px' }}>
                       Book Your Free Consultation
                     </h2>
-                    <p style={{ fontSize: '14px', color: '#9ca3af', marginBottom: isMobile ? '24px' : '32px' }}>Fill in the form and we'll get back to you within 24 hours.</p>
+                    <p style={{ fontSize: '14px', color: '#9ca3af', marginBottom: isMobile ? '20px' : '24px' }}>Fill in the form and we'll get back to you within 24 hours.</p>
+
+                    {serverError && (
+                      <div style={{
+                        display: 'flex', alignItems: 'center', gap: '10px',
+                        background: '#fef2f2', border: '1px solid #fecaca',
+                        borderRadius: '12px', padding: '12px 16px', marginBottom: '20px',
+                        color: '#b91c1c', fontSize: '14px'
+                      }}>
+                        <FiAlertCircle size={18} style={{ flexShrink: 0 }} />
+                        <span>{serverError}</span>
+                      </div>
+                    )}
 
                     <form onSubmit={handleSubmit}>
                       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
@@ -226,10 +283,13 @@ export default function Contact() {
                           <input
                             name="name" value={form.name} onChange={handleChange} required
                             placeholder="e.g. Ahmed Khan"
-                            style={inputStyle}
+                            style={{ ...inputStyle, borderColor: validationErrors.name ? '#ef4444' : '#e5e7eb' }}
                             onFocus={e => e.target.style.borderColor = '#23AAA6'}
-                            onBlur={e => e.target.style.borderColor = '#e5e7eb'}
+                            onBlur={e => e.target.style.borderColor = validationErrors.name ? '#ef4444' : '#e5e7eb'}
                           />
+                          {validationErrors.name && (
+                            <p style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px' }}>{validationErrors.name[0]}</p>
+                          )}
                         </div>
 
                         {/* Email */}
@@ -238,10 +298,13 @@ export default function Contact() {
                           <input
                             name="email" type="email" value={form.email} onChange={handleChange} required
                             placeholder="you@example.com"
-                            style={{padding: '10px', width: '100%'}}
+                            style={{ ...inputStyle, borderColor: validationErrors.email ? '#ef4444' : '#e5e7eb' }}
                             onFocus={e => e.target.style.borderColor = '#23AAA6'}
-                            onBlur={e => e.target.style.borderColor = '#e5e7eb'}
+                            onBlur={e => e.target.style.borderColor = validationErrors.email ? '#ef4444' : '#e5e7eb'}
                           />
+                          {validationErrors.email && (
+                            <p style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px' }}>{validationErrors.email[0]}</p>
+                          )}
                         </div>
                       </div>
 
@@ -253,10 +316,13 @@ export default function Contact() {
                           <input
                             name="phone" value={form.phone} onChange={handleChange} required
                             placeholder="+92 300 0000000"
-                            style={inputStyle}
+                            style={{ ...inputStyle, borderColor: validationErrors.phone ? '#ef4444' : '#e5e7eb' }}
                             onFocus={e => e.target.style.borderColor = '#23AAA6'}
-                            onBlur={e => e.target.style.borderColor = '#e5e7eb'}
+                            onBlur={e => e.target.style.borderColor = validationErrors.phone ? '#ef4444' : '#e5e7eb'}
                           />
+                          {validationErrors.phone && (
+                            <p style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px' }}>{validationErrors.phone[0]}</p>
+                          )}
                         </div>
 
                         {/* Country */}
@@ -264,13 +330,16 @@ export default function Contact() {
                           <label style={labelStyle}>Preferred Country</label>
                           <select
                             name="country" value={form.country} onChange={handleChange}
-                            style={{ ...inputStyle, cursor: 'pointer' }}
+                            style={{ ...inputStyle, cursor: 'pointer', borderColor: validationErrors.country ? '#ef4444' : '#e5e7eb' }}
                             onFocus={e => e.target.style.borderColor = '#23AAA6'}
-                            onBlur={e => e.target.style.borderColor = '#e5e7eb'}
+                            onBlur={e => e.target.style.borderColor = validationErrors.country ? '#ef4444' : '#e5e7eb'}
                           >
                             <option value="">Select a country</option>
                             {countries.map(c => <option key={c} value={c}>{c}</option>)}
                           </select>
+                          {validationErrors.country && (
+                            <p style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px' }}>{validationErrors.country[0]}</p>
+                          )}
                         </div>
                       </div>
 
@@ -279,13 +348,16 @@ export default function Contact() {
                         <label style={labelStyle}>Service You Need</label>
                         <select
                           name="service" value={form.service} onChange={handleChange}
-                          style={{ ...inputStyle, cursor: 'pointer' }}
+                          style={{ ...inputStyle, cursor: 'pointer', borderColor: validationErrors.service ? '#ef4444' : '#e5e7eb' }}
                           onFocus={e => e.target.style.borderColor = '#23AAA6'}
-                          onBlur={e => e.target.style.borderColor = '#e5e7eb'}
+                          onBlur={e => e.target.style.borderColor = validationErrors.service ? '#ef4444' : '#e5e7eb'}
                         >
                           <option value="">Select a service</option>
                           {services.map(s => <option key={s} value={s}>{s}</option>)}
                         </select>
+                        {validationErrors.service && (
+                          <p style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px' }}>{validationErrors.service[0]}</p>
+                        )}
                       </div>
 
                       {/* Message */}
@@ -294,10 +366,13 @@ export default function Contact() {
                         <textarea
                           name="message" value={form.message} onChange={handleChange} rows={isMobile ? 3 : 4}
                           placeholder="Tell us about your academic background, goals, or any questions..."
-                          style={{ ...inputStyle, resize: 'vertical', minHeight: isMobile ? '90px' : '110px', lineHeight: '1.6' }}
+                          style={{ ...inputStyle, resize: 'vertical', minHeight: isMobile ? '90px' : '110px', lineHeight: '1.6', borderColor: validationErrors.message ? '#ef4444' : '#e5e7eb' }}
                           onFocus={e => e.target.style.borderColor = '#23AAA6'}
-                          onBlur={e => e.target.style.borderColor = '#e5e7eb'}
+                          onBlur={e => e.target.style.borderColor = validationErrors.message ? '#ef4444' : '#e5e7eb'}
                         />
+                        {validationErrors.message && (
+                          <p style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px' }}>{validationErrors.message[0]}</p>
+                        )}
                       </div>
 
                       <button
